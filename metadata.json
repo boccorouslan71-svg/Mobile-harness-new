@@ -1,0 +1,6 @@
+{
+  "name": "Mobile Harness",
+  "description": "Autonomous AI development workspace bridging Claude Code, Linux PRoot terminal, project management, and live web previews.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,91 @@
+name: Build Mobile Harness Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Licenses & Install NDK / CMake
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager --install "ndk;26.1.10909125" "cmake;3.22.1" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Setup Signing Keystore
+        run: |
+          keytool -genkey -v -keystore release.jks \
+            -alias mobile-harness \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass mhpass123 \
+            -keypass mhpass123 \
+            -dname "CN=MobileHarness, OU=MobileHarness, O=MobileHarness, L=Default, S=Default, C=US"
+          echo "MH_UPLOAD_STORE_FILE=$GITHUB_WORKSPACE/release.jks" >> $GITHUB_ENV
+          echo "MH_UPLOAD_STORE_PASSWORD=mhpass123" >> $GITHUB_ENV
+          echo "MH_UPLOAD_KEY_ALIAS=mobile-harness" >> $GITHUB_ENV
+          echo "MH_UPLOAD_KEY_PASSWORD=mhpass123" >> $GITHUB_ENV
+
+      - name: Grant Execute Permission for Gradlew
+        run: chmod +x ./gradlew
+
+      - name: Build Online APK (Release & Debug)
+        run: |
+          ./gradlew assembleOnlineRelease assembleOnlineDebug --no-daemon --stacktrace
+
+      - name: Prepare APK Artifacts
+        run: |
+          mkdir -p artifacts
+          if [ -f app/build/outputs/apk/online/release/app-online-release.apk ]; then
+            cp app/build/outputs/apk/online/release/app-online-release.apk artifacts/Mobile-Harness-release.apk
+          fi
+          if [ -f app/build/outputs/apk/online/debug/app-online-debug.apk ]; then
+            cp app/build/outputs/apk/online/debug/app-online-debug.apk artifacts/Mobile-Harness-debug.apk
+          fi
+          echo "Generated APKs:"
+          ls -lh artifacts/
+
+      - name: Upload APKs to Workflow Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mobile-Harness-APKs
+          path: artifacts/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release (On Tag Push)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
