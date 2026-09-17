@@ -12,11 +12,15 @@ on:
 permissions:
   contents: write
 
+env:
+  ANDROID_HOME: /usr/local/lib/android/sdk
+  ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
 jobs:
   build:
     name: Build Android APK
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout Source Code
@@ -31,13 +35,49 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Licenses & Install NDK / CMake
+      - name: Fetch native dependencies (uncommitted git submodules)
+        # third_party/proot and third_party/libandroid-shmem are declared in
+        # .gitmodules but their gitlinks are missing from this repository, so
+        # CI would fail in the CMake step. Fetch them at the exact revisions
+        # used by upstream for a reproducible build. Skipped when already
+        # present (e.g. once the submodules are properly committed).
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager --install "ndk;26.1.10909125" "cmake;3.22.1" "platforms;android-36" "build-tools;36.0.0"
+          set -ex
+          fetch_shallow() {
+            dir="$1"; probe="$2"; url="$3"; ref="$4"
+            if [ -e "$probe" ]; then return 0; fi
+            rm -rf "$dir"
+            mkdir -p "$dir"
+            git -C "$dir" init -q
+            git -C "$dir" remote add origin "$url"
+            git -C "$dir" fetch --depth 1 origin "$ref"
+            git -C "$dir" checkout -q FETCH_HEAD
+          }
+          fetch_shallow third_party/proot third_party/proot/src/cli/proot.c \
+            https://github.com/termux/proot.git 61681c6481197e3c0cec6726075053adb740f235
+          fetch_shallow third_party/libandroid-shmem third_party/libandroid-shmem/shmem.c \
+            https://github.com/termux/libandroid-shmem.git 7f0bd7e25dbdd146265aff7c6a890029e374622d
+          test -f third_party/proot/src/cli/proot.c
+          test -f third_party/libandroid-shmem/shmem.c
+
+      - name: Accept Android SDK licenses
+        run: |
+          SDKMGR="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMGR" --licenses || true
+
+      - name: Install Android SDK components (NDK / CMake / Platform / Build Tools)
+        # The runner ships a preinstalled SDK. Install only the pinned versions
+        # this project needs. AGP auto-installs anything still missing (licenses
+        # are accepted above), so a failure here is not fatal.
+        run: |
+          SDKMGR="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMGR" --install \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;26.1.10909125" \
+            "cmake;3.22.1" || true
+          ls "$ANDROID_SDK_ROOT/ndk" || true
+          ls "$ANDROID_SDK_ROOT/cmake" || true
 
       - name: Setup Signing Keystore
         run: |
@@ -49,10 +89,10 @@ jobs:
             -storepass mhpass123 \
             -keypass mhpass123 \
             -dname "CN=MobileHarness, OU=MobileHarness, O=MobileHarness, L=Default, S=Default, C=US"
-          echo "MH_UPLOAD_STORE_FILE=$GITHUB_WORKSPACE/release.jks" >> $GITHUB_ENV
-          echo "MH_UPLOAD_STORE_PASSWORD=mhpass123" >> $GITHUB_ENV
-          echo "MH_UPLOAD_KEY_ALIAS=mobile-harness" >> $GITHUB_ENV
-          echo "MH_UPLOAD_KEY_PASSWORD=mhpass123" >> $GITHUB_ENV
+          echo "MH_UPLOAD_STORE_FILE=$GITHUB_WORKSPACE/release.jks" >> "$GITHUB_ENV"
+          echo "MH_UPLOAD_STORE_PASSWORD=mhpass123" >> "$GITHUB_ENV"
+          echo "MH_UPLOAD_KEY_ALIAS=mobile-harness" >> "$GITHUB_ENV"
+          echo "MH_UPLOAD_KEY_PASSWORD=mhpass123" >> "$GITHUB_ENV"
 
       - name: Grant Execute Permission for Gradlew
         run: chmod +x ./gradlew
