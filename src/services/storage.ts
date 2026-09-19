@@ -173,14 +173,24 @@ export const StorageService = {
     }
     try {
       const parsed: ProviderProfile = JSON.parse(val);
-      if (parsed.kind === 'CUSTOM_OPENAI' && parsed.customProviderId) {
+      if (parsed.kind === 'CUSTOM_OPENAI') {
         const customs = this.getCustomOpenAIProviders();
-        const found = customs.find(c => c.id === parsed.customProviderId);
-        if (found) {
-          parsed.baseUrl = found.baseUrl;
-          parsed.model = found.model;
-          parsed.customName = found.name;
-          parsed.hasSecret = !!found.apiKey.trim();
+        if (parsed.customProviderId) {
+          const found = customs.find(c => c.id === parsed.customProviderId);
+          if (found) {
+            parsed.baseUrl = found.baseUrl;
+            parsed.model = found.model;
+            parsed.customName = found.name;
+            parsed.hasSecret = !!found.apiKey.trim();
+            return parsed;
+          }
+        }
+        if (customs.length > 0) {
+          parsed.customProviderId = customs[0].id;
+          parsed.customName = customs[0].name;
+          parsed.baseUrl = customs[0].baseUrl;
+          parsed.model = customs[0].model;
+          parsed.hasSecret = !!customs[0].apiKey.trim();
           return parsed;
         }
       }

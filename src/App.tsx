@@ -11,7 +11,7 @@ import {
   ProviderKind,
 } from './types';
 import { StorageService } from './services/storage';
-import { generateQuickChatIdentity, INITIAL_PROJECTS } from './data/defaultData';
+import { generateQuickChatIdentity, INITIAL_PROJECTS, PROVIDER_KINDS } from './data/defaultData';
 import { AppHeader } from './components/AppHeader';
 import { BottomNavBar } from './components/BottomNavBar';
 import { ProjectsScreen } from './components/ProjectsScreen';
@@ -190,10 +190,31 @@ export const App: React.FC = () => {
       StorageService.saveSecret(providerKind, apiKey);
     }
 
+    const meta = PROVIDER_KINDS[providerKind];
+    let customProviderId: string | undefined;
+    let customName: string | undefined;
+    let baseUrl = meta?.defaultBaseUrl || '';
+    let model = meta?.defaultModel || '';
+
+    if (providerKind === 'CUSTOM_OPENAI') {
+      const customList = StorageService.getCustomOpenAIProviders();
+      if (customList.length > 0) {
+        customProviderId = customList[0].id;
+        customName = customList[0].name;
+        baseUrl = customList[0].baseUrl;
+        model = customList[0].model;
+        if (apiKey) {
+          StorageService.updateCustomOpenAIProvider(customList[0].id, { apiKey });
+        }
+      }
+    }
+
     const newProvider: ProviderProfile = {
       kind: providerKind,
-      baseUrl: provider.baseUrl,
-      model: provider.model,
+      baseUrl,
+      model,
+      customProviderId,
+      customName,
       hasSecret: !!apiKey,
     };
     setProvider(newProvider);

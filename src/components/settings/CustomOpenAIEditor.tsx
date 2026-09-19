@@ -63,6 +63,18 @@ export const CustomOpenAIEditor: React.FC<CustomOpenAIEditorProps> = ({
   const [isTesting, setIsTesting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  React.useEffect(() => {
+    if (isOpen) {
+      setName(initialProvider?.name || '');
+      setBaseUrl(initialProvider?.baseUrl || 'https://api.openai.com/v1');
+      setApiKey(initialProvider?.apiKey || '');
+      setModel(initialProvider?.model || 'gpt-4o');
+      setTestResult(null);
+      setErrorMsg('');
+      setShowKey(false);
+    }
+  }, [isOpen, initialProvider]);
+
   if (!isOpen) return null;
 
   const handleApplyPreset = (preset: typeof POPULAR_PRESETS[0]) => {
