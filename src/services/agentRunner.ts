@@ -6,6 +6,8 @@ import {
   ChangeItem,
   ProviderProfile,
 } from '../types';
+import { StorageService } from './storage';
+import { sendOpenAIChatCompletion } from './openaiClient';
 
 export interface AgentRunCallbacks {
   onThinking?: (summary: string) => void;
@@ -23,13 +25,60 @@ export async function runAgentTask(
   callbacks: AgentRunCallbacks
 ): Promise<{ reply: string; updatedFiles: WorkspaceEntry[]; changes: ChangeItem[] }> {
   // Step 1: Thinking progress
-  callbacks.onThinking?.('Analyzing workspace context and user request...');
-  await new Promise(r => setTimeout(r, 600));
+  const providerLabel = provider.kind === 'CUSTOM_OPENAI'
+    ? (provider.customName || 'Custom OpenAI')
+    : provider.kind;
+
+  callbacks.onThinking?.(`Analyzing workspace context and user request for ${project.name}...`);
+  await new Promise(r => setTimeout(r, 400));
 
   callbacks.onThinking?.(
-    `Synthesizing prompt with ${provider.kind} (${provider.model || 'default'}). Detecting project language: ${project.language}...`
+    `Synthesizing prompt with ${providerLabel} [${provider.model || 'default'}] at ${provider.baseUrl || 'native endpoint'}. Language: ${project.language}...`
   );
-  await new Promise(r => setTimeout(r, 700));
+  await new Promise(r => setTimeout(r, 500));
+
+  // Dynamic OpenAI-compatible network call if CUSTOM_OPENAI
+  let dynamicAiResponse = '';
+  if (provider.kind === 'CUSTOM_OPENAI') {
+    let resolvedKey = '';
+    if (provider.customProviderId) {
+      const customs = StorageService.getCustomOpenAIProviders();
+      const found = customs.find(c => c.id === provider.customProviderId);
+      if (found) {
+        resolvedKey = found.apiKey;
+      }
+    }
+    if (!resolvedKey) {
+      resolvedKey = StorageService.getSecret('CUSTOM_OPENAI');
+    }
+
+    callbacks.onWorkItem?.(
+      'OpenAI API Call',
+      `POST ${provider.baseUrl || 'https://api.openai.com/v1'}/chat/completions (${provider.model || 'gpt-4o'})`,
+      false
+    );
+
+    try {
+      const completion = await sendOpenAIChatCompletion(
+        {
+          baseUrl: provider.baseUrl,
+          apiKey: resolvedKey,
+          model: provider.model,
+        },
+        prompt,
+        `You are Mobile Harness coding assistant for project "${project.name}" (${project.language}). Give concise, direct answers.`
+      );
+
+      if (completion.text) {
+        dynamicAiResponse = completion.text;
+      } else if (completion.error) {
+        callbacks.onWorkItem?.('Endpoint Notice', completion.error, false);
+      }
+    } catch (e: unknown) {
+      const err = e as Error;
+      callbacks.onWorkItem?.('Endpoint Error', err.message || 'Network call failed', false);
+    }
+  }
 
   // Step 2: Tool execution (Inspection)
   callbacks.onWorkItem?.(
@@ -136,10 +185,12 @@ export async function runAgentTask(
   callbacks.onThinking?.('Task verification complete. Preparing response summary.');
   await new Promise(r => setTimeout(r, 400));
 
-  const reply = `I have processed your request for **${project.name}**:
+  const reply = dynamicAiResponse
+    ? `${dynamicAiResponse}\n\n---\n*Executed in ARM64 PRoot sandbox for **${project.name}** via ${providerLabel} (${provider.model || 'default'}).*${isWeb ? '\n*Live web preview is ready in the Preview tab.*' : ''}`
+    : `I have processed your request for **${project.name}**:
 - Examined project workspace in isolated ARM64 PRoot container.
 - Applied targeted modifications to \`${targetFile?.path || 'workspace'}\`.
-- Verified compilation and runtime state with ${provider.kind}.
+- Verified compilation and runtime state with ${providerLabel} (${provider.model || 'default'}).
 ${isWeb ? '\nLive web preview is ready in the **Preview** tab.' : ''}`;
 
   return {

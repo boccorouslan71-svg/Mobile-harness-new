@@ -43,6 +43,7 @@ interface WorkspaceViewProps {
   onUpdateFiles: (files: WorkspaceEntry[]) => void;
   onUpdateMessages: (chatId: string, messages: ChatMessage[]) => void;
   onRunBuild: () => void;
+  onUpdateProvider?: (profile: ProviderProfile) => void;
 }
 
 export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
@@ -58,6 +59,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   onUpdateFiles,
   onUpdateMessages,
   onRunBuild,
+  onUpdateProvider,
 }) => {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('CHAT');
   const [changes, setChanges] = useState<ChangeItem[]>([]);
@@ -324,6 +326,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           messages={messages}
           pendingApproval={pendingApproval}
           isRunning={isRunning}
+          provider={provider}
+          onUpdateProvider={onUpdateProvider}
           onSendMessage={handleSendMessage}
           onApproveTool={handleApproveTool}
           onRejectTool={handleRejectTool}

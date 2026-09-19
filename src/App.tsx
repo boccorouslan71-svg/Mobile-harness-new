@@ -235,6 +235,10 @@ export const App: React.FC = () => {
             files={activeFiles}
             messages={activeMessages}
             provider={provider}
+            onUpdateProvider={(newProfile) => {
+              setProvider(newProfile);
+              StorageService.saveProvider(newProfile);
+            }}
             onBack={handleBackToProjects}
             onSelectChat={setActiveChatId}
             onCreateChat={handleCreateChat}

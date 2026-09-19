@@ -16,14 +16,30 @@ import {
   Check,
   BrainCircuit,
   Eye,
+  ChevronDown,
+  Server,
+  Globe,
+  Lock,
 } from 'lucide-react';
-import { ChatMessage, ToolRequest, Project, ActivityItem } from '../../types';
+import {
+  ChatMessage,
+  ToolRequest,
+  Project,
+  ActivityItem,
+  ProviderProfile,
+  ProviderKind,
+  CustomOpenAIProvider,
+} from '../../types';
+import { PROVIDER_KINDS } from '../../data/defaultData';
+import { StorageService } from '../../services/storage';
 
 interface ChatTabProps {
   project: Project;
   messages: ChatMessage[];
   pendingApproval: ToolRequest | null;
   isRunning: boolean;
+  provider?: ProviderProfile;
+  onUpdateProvider?: (profile: ProviderProfile) => void;
   onSendMessage: (text: string, attachments?: File[]) => void;
   onApproveTool: (approvalId: string) => void;
   onRejectTool: (approvalId: string) => void;
@@ -35,6 +51,8 @@ export const ChatTab: React.FC<ChatTabProps> = ({
   messages,
   pendingApproval,
   isRunning,
+  provider = StorageService.getProvider(),
+  onUpdateProvider,
   onSendMessage,
   onApproveTool,
   onRejectTool,
@@ -42,12 +60,51 @@ export const ChatTab: React.FC<ChatTabProps> = ({
 }) => {
   const [input, setInput] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showModelMenu, setShowModelMenu] = useState(false);
+  const [customProviders, setCustomProviders] = useState<CustomOpenAIProvider[]>(
+    StorageService.getCustomOpenAIProviders()
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, pendingApproval, isRunning]);
+
+  // Keep custom providers in sync
+  useEffect(() => {
+    if (showModelMenu) {
+      setCustomProviders(StorageService.getCustomOpenAIProviders());
+    }
+  }, [showModelMenu]);
+
+  const handleSelectStandardProvider = (kind: ProviderKind) => {
+    const meta = PROVIDER_KINDS[kind];
+    if (!meta) return;
+    const newProfile: ProviderProfile = {
+      kind,
+      baseUrl: meta.defaultBaseUrl,
+      model: meta.defaultModel,
+      hasSecret: !!StorageService.getSecret(kind),
+    };
+    onUpdateProvider?.(newProfile);
+    StorageService.saveProvider(newProfile);
+    setShowModelMenu(false);
+  };
+
+  const handleSelectCustomOpenAI = (cp: CustomOpenAIProvider) => {
+    const newProfile: ProviderProfile = {
+      kind: 'CUSTOM_OPENAI',
+      baseUrl: cp.baseUrl,
+      model: cp.model,
+      customProviderId: cp.id,
+      customName: cp.name,
+      hasSecret: !!cp.apiKey.trim(),
+    };
+    onUpdateProvider?.(newProfile);
+    StorageService.saveProvider(newProfile);
+    setShowModelMenu(false);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,8 +126,137 @@ export const ChatTab: React.FC<ChatTabProps> = ({
     `Scaffold test suite`,
   ];
 
+  // Current active display label
+  const activeModelDisplay = provider.kind === 'CUSTOM_OPENAI'
+    ? (provider.customName || 'Custom OpenAI')
+    : (PROVIDER_KINDS[provider.kind]?.title || provider.kind);
+  const activeModelIdentifier = provider.model || 'default';
+
   return (
     <div className="flex flex-col h-[calc(100vh-210px)] max-h-[820px] bg-[#0B0E14] rounded-2xl border border-[#2A3240] overflow-hidden">
+      {/* Top Model Selector Bar */}
+      <div className="px-4 py-2 bg-[#131821] border-b border-[#2A3240] flex items-center justify-between relative z-20">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowModelMenu(!showModelMenu)}
+            className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-[#0B0E14] hover:bg-[#1B222D] border border-[#2A3240] text-xs transition"
+          >
+            {provider.kind === 'CUSTOM_OPENAI' ? (
+              <Server className="w-3.5 h-3.5 text-[#69D69E]" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5 text-[#F28C52]" />
+            )}
+            <span className="text-[#9AA0A6]">Model:</span>
+            <span className="font-semibold text-white truncate max-w-[140px] sm:max-w-[200px]">
+              {activeModelDisplay}
+            </span>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1B222D] text-[#8EA8FF]">
+              {activeModelIdentifier}
+            </span>
+            <ChevronDown className="w-3.5 h-3.5 text-[#9AA0A6]" />
+          </button>
+
+          {/* Dropdown Menu */}
+          {showModelMenu && (
+            <>
+              <div
+                className="fixed inset-0 z-30"
+                onClick={() => setShowModelMenu(false)}
+              />
+              <div className="absolute left-0 mt-1.5 w-72 sm:w-80 rounded-2xl bg-[#131821] border border-[#2A3240] shadow-2xl p-2 z-40 space-y-2 max-h-96 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+                {/* Standard Providers Group */}
+                <div>
+                  <span className="block px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#9AA0A6]">
+                    Standard Providers
+                  </span>
+                  <div className="space-y-0.5">
+                    {Object.values(PROVIDER_KINDS)
+                      .filter(p => p.kind !== 'CUSTOM_OPENAI')
+                      .map((p) => {
+                        const isSelected = provider.kind === p.kind;
+                        return (
+                          <button
+                            key={p.kind}
+                            type="button"
+                            onClick={() => handleSelectStandardProvider(p.kind)}
+                            className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs text-left transition ${
+                              isSelected
+                                ? 'bg-[#1B222D] text-white font-semibold'
+                                : 'text-[#9AA0A6] hover:text-white hover:bg-[#0B0E14]'
+                            }`}
+                          >
+                            <div className="truncate">
+                              <span className="text-white block">{p.title}</span>
+                              <span className="text-[10px] text-[#9AA0A6] font-mono">
+                                {p.defaultModel || 'default'}
+                              </span>
+                            </div>
+                            {isSelected && (
+                              <Check className="w-4 h-4 text-[#F28C52] shrink-0" />
+                            )}
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+
+                {/* Custom OpenAI Providers Group */}
+                <div className="pt-2 border-t border-[#2A3240]">
+                  <div className="flex items-center justify-between px-2 py-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#69D69E] flex items-center gap-1.5">
+                      <Server className="w-3 h-3 text-[#69D69E]" />
+                      Custom OpenAI ({customProviders.length})
+                    </span>
+                  </div>
+                  <div className="space-y-0.5">
+                    {customProviders.map((cp) => {
+                      const isSelected =
+                        provider.kind === 'CUSTOM_OPENAI' && provider.customProviderId === cp.id;
+
+                      return (
+                        <button
+                          key={cp.id}
+                          type="button"
+                          onClick={() => handleSelectCustomOpenAI(cp)}
+                          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs text-left transition ${
+                            isSelected
+                              ? 'bg-[#1B222D] text-white font-semibold border border-[#69D69E]/30'
+                              : 'text-[#9AA0A6] hover:text-white hover:bg-[#0B0E14]'
+                          }`}
+                        >
+                          <div className="truncate pr-2">
+                            <span className="text-white font-medium block truncate">
+                              {cp.name}
+                            </span>
+                            <div className="flex items-center gap-1.5 text-[10px] text-[#9AA0A6] font-mono">
+                              <span className="text-[#8EA8FF]">{cp.model}</span>
+                              <span>•</span>
+                              <span className="truncate max-w-[120px]">{cp.baseUrl}</span>
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <Check className="w-4 h-4 text-[#69D69E] shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Sandbox Status Badge */}
+        <div className="flex items-center gap-2 text-[11px] text-[#9AA0A6]">
+          <span className="hidden sm:inline font-mono text-[10px] px-2 py-0.5 rounded bg-[#0B0E14] text-[#69D69E] border border-[#2A3240] flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#69D69E] animate-pulse" />
+            Sandbox Online
+          </span>
+        </div>
+      </div>
+
       {/* Chat Messages List */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
         {messages.map((msg) => {

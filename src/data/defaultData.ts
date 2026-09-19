@@ -1,4 +1,4 @@
-import { DevStackInfo, ProviderKindMeta, Project, WorkspaceEntry, ProjectChat, ChatMessage } from '../types';
+import { DevStackInfo, ProviderKindMeta, Project, WorkspaceEntry, ProjectChat, ChatMessage, CustomOpenAIProvider } from '../types';
 
 export const PROVIDER_KINDS: Record<string, ProviderKindMeta> = {
   CLAUDE: {
@@ -44,14 +44,42 @@ export const PROVIDER_KINDS: Record<string, ProviderKindMeta> = {
   },
   CUSTOM: {
     kind: 'CUSTOM',
-    title: 'Custom API',
-    subtitle: 'Anthropic-compatible endpoint',
+    title: 'Custom API (Anthropic)',
+    subtitle: 'Anthropic-compatible gateway',
     protocol: 'ANTHROPIC_GATEWAY',
     defaultBaseUrl: '',
     defaultModel: '',
     experimental: true,
   },
+  CUSTOM_OPENAI: {
+    kind: 'CUSTOM_OPENAI',
+    title: 'Custom OpenAI',
+    subtitle: 'OpenAI-compatible endpoints (Ollama, vLLM, Groq, OpenAI, etc.)',
+    protocol: 'OPENAI_CHAT',
+    defaultBaseUrl: 'https://api.openai.com/v1',
+    defaultModel: 'gpt-4o',
+    experimental: false,
+  },
 };
+
+export const INITIAL_CUSTOM_OPENAI_PROVIDERS: CustomOpenAIProvider[] = [
+  {
+    id: 'openai-gpt4o',
+    name: 'OpenAI (GPT-4o)',
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: '',
+    model: 'gpt-4o',
+    createdAtMillis: 1710000000000,
+  },
+  {
+    id: 'ollama-local',
+    name: 'Ollama (Local)',
+    baseUrl: 'http://localhost:11434/v1',
+    apiKey: '',
+    model: 'llama3:latest',
+    createdAtMillis: 1710000001000,
+  },
+];
 
 export const DEV_STACKS: DevStackInfo[] = [
   {

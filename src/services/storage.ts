@@ -6,6 +6,7 @@ import {
   ProviderProfile,
   AppThemeMode,
   DevStackId,
+  CustomOpenAIProvider,
 } from '../types';
 import {
   INITIAL_PROJECTS,
@@ -13,6 +14,7 @@ import {
   INITIAL_CHATS,
   INITIAL_MESSAGES,
   PROVIDER_KINDS,
+  INITIAL_CUSTOM_OPENAI_PROVIDERS,
 } from '../data/defaultData';
 
 const STORAGE_KEYS = {
@@ -26,6 +28,7 @@ const STORAGE_KEYS = {
   MESSAGES_PREFIX: 'mh_messages_',
   PROVIDER: 'mh_provider',
   VAULT_PREFIX: 'mh_vault_',
+  CUSTOM_OPENAI_PROVIDERS: 'mh_custom_openai_providers',
 };
 
 export const StorageService = {
@@ -169,8 +172,21 @@ export const StorageService = {
       };
     }
     try {
-      const parsed = JSON.parse(val);
-      parsed.hasSecret = !!this.getSecret(parsed.kind);
+      const parsed: ProviderProfile = JSON.parse(val);
+      if (parsed.kind === 'CUSTOM_OPENAI' && parsed.customProviderId) {
+        const customs = this.getCustomOpenAIProviders();
+        const found = customs.find(c => c.id === parsed.customProviderId);
+        if (found) {
+          parsed.baseUrl = found.baseUrl;
+          parsed.model = found.model;
+          parsed.customName = found.name;
+          parsed.hasSecret = !!found.apiKey.trim();
+          return parsed;
+        }
+      }
+      parsed.hasSecret = parsed.kind === 'CUSTOM_OPENAI'
+        ? !!this.getSecret('CUSTOM_OPENAI')
+        : !!this.getSecret(parsed.kind);
       return parsed;
     } catch {
       return {
@@ -183,6 +199,92 @@ export const StorageService = {
   },
   saveProvider(profile: ProviderProfile) {
     localStorage.setItem(STORAGE_KEYS.PROVIDER, JSON.stringify(profile));
+  },
+
+  getCustomOpenAIProviders(): CustomOpenAIProvider[] {
+    const val = localStorage.getItem(STORAGE_KEYS.CUSTOM_OPENAI_PROVIDERS);
+    if (val === null) {
+      this.saveCustomOpenAIProviders(INITIAL_CUSTOM_OPENAI_PROVIDERS);
+      return INITIAL_CUSTOM_OPENAI_PROVIDERS;
+    }
+    try {
+      const parsed = JSON.parse(val);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+      return INITIAL_CUSTOM_OPENAI_PROVIDERS;
+    } catch {
+      return INITIAL_CUSTOM_OPENAI_PROVIDERS;
+    }
+  },
+
+  saveCustomOpenAIProviders(providers: CustomOpenAIProvider[]) {
+    localStorage.setItem(STORAGE_KEYS.CUSTOM_OPENAI_PROVIDERS, JSON.stringify(providers));
+  },
+
+  addCustomOpenAIProvider(provider: Omit<CustomOpenAIProvider, 'id' | 'createdAtMillis'>): CustomOpenAIProvider {
+    const current = this.getCustomOpenAIProviders();
+    const newEntry: CustomOpenAIProvider = {
+      ...provider,
+      id: `cop-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      createdAtMillis: Date.now(),
+    };
+    const updated = [...current, newEntry];
+    this.saveCustomOpenAIProviders(updated);
+    return newEntry;
+  },
+
+  updateCustomOpenAIProvider(id: string, updates: Partial<CustomOpenAIProvider>): CustomOpenAIProvider | null {
+    const current = this.getCustomOpenAIProviders();
+    const idx = current.findIndex(p => p.id === id);
+    if (idx === -1) return null;
+    const updatedEntry = { ...current[idx], ...updates };
+    current[idx] = updatedEntry;
+    this.saveCustomOpenAIProviders(current);
+
+    // If this is currently the active provider, update the active profile as well
+    const active = this.getProvider();
+    if (active.kind === 'CUSTOM_OPENAI' && active.customProviderId === id) {
+      this.saveProvider({
+        ...active,
+        baseUrl: updatedEntry.baseUrl,
+        model: updatedEntry.model,
+        customName: updatedEntry.name,
+        hasSecret: !!updatedEntry.apiKey.trim(),
+      });
+    }
+    return updatedEntry;
+  },
+
+  deleteCustomOpenAIProvider(id: string) {
+    const current = this.getCustomOpenAIProviders();
+    const filtered = current.filter(p => p.id !== id);
+    this.saveCustomOpenAIProviders(filtered);
+
+    // If deleted provider was the active one, fallback to another or Anthropic
+    const active = this.getProvider();
+    if (active.kind === 'CUSTOM_OPENAI' && active.customProviderId === id) {
+      if (filtered.length > 0) {
+        const next = filtered[0];
+        this.saveProvider({
+          kind: 'CUSTOM_OPENAI',
+          baseUrl: next.baseUrl,
+          model: next.model,
+          customProviderId: next.id,
+          customName: next.name,
+          hasSecret: !!next.apiKey.trim(),
+        });
+      } else {
+        const defaultKind = 'ANTHROPIC';
+        const meta = PROVIDER_KINDS[defaultKind];
+        this.saveProvider({
+          kind: 'ANTHROPIC',
+          baseUrl: meta.defaultBaseUrl,
+          model: meta.defaultModel,
+          hasSecret: !!this.getSecret('ANTHROPIC'),
+        });
+      }
+    }
   },
 
   getSecret(kind: string): string {

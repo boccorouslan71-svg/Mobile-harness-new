@@ -206,7 +206,13 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onComp
                 </label>
                 <input
                   type="password"
-                  placeholder="sk-ant-... or leave empty for offline simulation"
+                  placeholder={
+                    selectedProvider === 'CUSTOM_OPENAI'
+                      ? 'sk-... or leave empty for local endpoint (e.g. Ollama)'
+                      : selectedProvider === 'ANTHROPIC'
+                      ? 'sk-ant-... or leave empty for offline simulation'
+                      : 'Enter API key or leave empty'
+                  }
                   value={apiKey}
                   onChange={e => setApiKey(e.target.value)}
                   className="w-full bg-[#0B0E14] border border-[#2A3240] rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#F28C52] font-mono placeholder:text-gray-600"

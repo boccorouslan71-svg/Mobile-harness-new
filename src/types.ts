@@ -12,7 +12,17 @@ export type ProviderKind =
   | 'LLM_ROUTER'
   | 'DEEPSEEK'
   | 'KIMI'
-  | 'CUSTOM';
+  | 'CUSTOM'
+  | 'CUSTOM_OPENAI';
+
+export interface CustomOpenAIProvider {
+  id: string;
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  createdAtMillis?: number;
+}
 
 export interface ProviderKindMeta {
   kind: ProviderKind;
@@ -29,6 +39,8 @@ export interface ProviderProfile {
   baseUrl: string;
   model: string;
   hasSecret: boolean;
+  customProviderId?: string;
+  customName?: string;
 }
 
 export type ProjectKind = 'PROJECT' | 'QUICK_PROJECT';
