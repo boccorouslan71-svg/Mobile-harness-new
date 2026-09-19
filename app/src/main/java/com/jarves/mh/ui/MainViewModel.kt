@@ -189,9 +189,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         RuntimeSetupController.restore(application)
         if (!preferences.legacySeededCredentialRemoved) {
             vault.remove(ProviderKind.CUSTOM.name)
+            vault.remove(ProviderKind.CUSTOM_OPENAI.name)
             preferences.legacySeededCredentialRemoved = true
             _state.update { current ->
-                if (current.provider.kind == ProviderKind.CUSTOM) {
+                if (current.provider.kind == ProviderKind.CUSTOM || current.provider.kind == ProviderKind.CUSTOM_OPENAI) {
                     current.copy(provider = current.provider.copy(hasSecret = false))
                 } else current
             }
@@ -201,12 +202,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             preferences.testProviderDefaultsVersion < TEST_PROVIDER_DEFAULTS_VERSION
         ) {
             val testProvider = ProviderProfile(
-                kind = ProviderKind.CUSTOM,
-                baseUrl = TEST_OPENROUTER_BASE_URL,
-                model = TEST_OPENROUTER_MODEL,
+                kind = ProviderKind.CUSTOM_OPENAI,
+                baseUrl = "https://api.openai.com",
+                model = "gpt-4o",
                 hasSecret = true,
             )
-            vault.put(ProviderKind.CUSTOM.name, BuildConfig.TEST_OPENROUTER_API_KEY)
+            vault.put(ProviderKind.CUSTOM_OPENAI.name, BuildConfig.TEST_OPENROUTER_API_KEY)
             preferences.saveProvider(testProvider)
             preferences.testProviderDefaultsVersion = TEST_PROVIDER_DEFAULTS_VERSION
             _state.update { it.copy(provider = testProvider) }
@@ -2100,7 +2101,5 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private const val MAX_ATTACHMENTS_PER_MESSAGE = 5
         private const val MAX_ATTACHMENT_BYTES = 25L * 1024L * 1024L
         private const val TEST_PROVIDER_DEFAULTS_VERSION = 1
-        private const val TEST_OPENROUTER_BASE_URL = "https://openrouter.ai/api"
-        private const val TEST_OPENROUTER_MODEL = "stealth/ox-alpha"
     }
 }
